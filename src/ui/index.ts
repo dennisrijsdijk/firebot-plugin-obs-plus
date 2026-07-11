@@ -1,4 +1,4 @@
-import { UIExtension } from "@crowbartools/firebot-custom-scripts-types/types/modules/ui-extension-manager";
+import { UIExtension } from "@crowbartools/firebot-types";
 import obsCanvasService from "./obs-canvas-service";
 
 const extension: UIExtension = {

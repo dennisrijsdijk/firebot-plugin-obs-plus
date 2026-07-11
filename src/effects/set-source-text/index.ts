@@ -1,4 +1,4 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
+import type { EffectType } from "@crowbartools/firebot-types";
 import template from "./template.html";
 import obs from "../../obs-remote";
 
@@ -11,10 +11,10 @@ type EffectModel = {
 }
 
 type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
-    textSources: Array<OBSSource>;
-    selected: OBSSource;
+    textSources: Array<OBSSource> | null;
+    selected: OBSSource | null;
 
-    supportsCanvases: boolean;
+    supportsCanvases: boolean | null;
 
     selectTextSource: (textSource: OBSSource) => void;
     toggleSource: () => void;
@@ -22,10 +22,10 @@ type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
     getTextSources: () => Promise<void>;
 }>;
 
-const model: Effects.EffectType<EffectModel> = {
+const model: EffectType<EffectModel> = {
     definition: {
         id: "dennisontheinternet:obs-canvases:set-source-text",
-        name: "[OBS Canvas] Set Source Text",
+        name: "[OBS Plus] Set Source Text",
         description: "Sets the text in an OBS text source",
         icon: "fad fa-font-case",
         categories: ["common", "integrations"]

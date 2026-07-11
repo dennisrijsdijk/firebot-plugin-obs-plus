@@ -1,14 +1,13 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
+import firebot, { EffectType } from "@crowbartools/firebot-types";
 import template from "./template.html";
 import obs from "../../obs-remote";
-import globals from "../../globals";
 
 type EffectModel = {
     selectedSources: Array<OBSSourceVisibilityData>;
 }
 
 type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
-    canvasedSourceData: OBSCanvasedSourceData[];
+    canvasedSourceData: OBSCanvasedSourceData[] | null;
     searchText: string;
     missingSources: EffectModel["selectedSources"];
     onlyShowSelected: boolean;
@@ -28,10 +27,10 @@ type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
     updateOnlyShowSelected: (value: boolean) => void;
 }>;
 
-const model: Effects.EffectType<EffectModel> = {
+const model: EffectType<EffectModel> = {
     definition: {
         id: "dennisontheinternet:obs-canvases:toggle-source-visibility",
-        name: "[OBS Canvas] Toggle Source Visibility",
+        name: "[OBS Plus] Toggle Source Visibility",
         description: "Toggle visibility for OBS sources",
         icon: "fad fa-clone",
         categories: ["common", "integrations"]
@@ -54,7 +53,7 @@ const model: Effects.EffectType<EffectModel> = {
 
         $scope.deleteSource = (source: OBSSourceVisibilityData): void => {
             $scope.effect.selectedSources = $scope.effect.selectedSources.filter(s => !(s.sceneUuid === source.sceneUuid && s.sceneItemId === source.sceneItemId && s.groupUuid === source.groupUuid));
-            $scope.missingSources = $scope.missingSources.filter(s => !(s.sceneUuid === source.sceneUuid && s.sceneItemId === source.sceneItemId && s.groupUuid === source.groupUuid));
+            $scope.missingSources = $scope.missingSources!.filter(s => !(s.sceneUuid === source.sceneUuid && s.sceneItemId === source.sceneItemId && s.groupUuid === source.groupUuid));
         };
 
         $scope.toggleSourceSelected = (sceneUuid: string, sceneItemId: number, groupUuid?: string): void => {
@@ -62,9 +61,9 @@ const model: Effects.EffectType<EffectModel> = {
             if (sourceIndex !== -1) {
                 $scope.effect.selectedSources.splice(sourceIndex, 1);
             } else {
-                const scene = $scope.canvasedSourceData.flatMap(canvas => canvas.scenes).find(s => s.sceneUuid === sceneUuid);
+                const scene = $scope.canvasedSourceData!.flatMap(canvas => canvas.scenes).find(s => s.sceneUuid === sceneUuid);
                 const source = scene?.sources.find(s => s.sceneItemId === sceneItemId && s.groupUuid === groupUuid);
-                if (source) {
+                if (scene && source) {
                     $scope.effect.selectedSources.push({
                         sceneUuid,
                         sceneName: scene.sceneName,
@@ -77,7 +76,7 @@ const model: Effects.EffectType<EffectModel> = {
                 }
             }
 
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.getActionDisplay = (action: boolean | "toggle"): string => {
@@ -95,7 +94,7 @@ const model: Effects.EffectType<EffectModel> = {
 
         $scope.getSourceActionDisplay = (sceneUuid: string, sceneItemId: number, groupUuid?: string): string => {
             const source = $scope.effect.selectedSources.find(s => s.sceneUuid === sceneUuid && s.sceneItemId === sceneItemId && s.groupUuid === groupUuid);
-            return source ? $scope.getActionDisplay(source.action) : "";
+            return source ? $scope.getActionDisplay!(source.action) : "";
         };
 
         $scope.setSourceAction = (sceneUuid: string, sceneItemId: number, action: boolean | "toggle", groupUuid?: string): void => {
@@ -107,7 +106,7 @@ const model: Effects.EffectType<EffectModel> = {
 
         $scope.updateOnlyShowSelected = (value: boolean) => {
             $scope.onlyShowSelected = value;
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.filterSources = (searchText: string): void => {
@@ -120,11 +119,11 @@ const model: Effects.EffectType<EffectModel> = {
                 (!$scope.onlyShowSelected || $scope.effect.selectedSources.some(s => s.sceneUuid === scene.sceneUuid && s.sceneItemId === source.sceneItemId && s.groupUuid === source.groupUuid)));
             }).map(s => s.sceneUuid) || [];
 
-            $scope.matchingCanvases = $scope.canvasedSourceData?.filter(canvas => canvas.scenes.some(scene => $scope.matchingScenes.includes(scene.sceneUuid))).map(c => c.canvasUuid) || [];
+            $scope.matchingCanvases = $scope.canvasedSourceData?.filter(canvas => canvas.scenes.some(scene => $scope.matchingScenes!.includes(scene.sceneUuid))).map(c => c.canvasUuid) || [];
         };
 
         $scope.getSourceData = async (): Promise<void> => {
-            $scope.supportsCanvases = await obsCanvasService.getObsSupportsCanvases();
+            $scope.supportsCanvases = !!await obsCanvasService.getObsSupportsCanvases();
 
             if (!$scope.supportsCanvases) {
                 return;
@@ -135,7 +134,7 @@ const model: Effects.EffectType<EffectModel> = {
             $scope.canvasedSourceData = await obsCanvasService.getCanvasedSourceData();
 
             for (const source of $scope.effect.selectedSources) {
-                const sourceExists = $scope.canvasedSourceData.some((canvas) => {
+                const sourceExists = $scope.canvasedSourceData!.some((canvas) => {
                     return canvas.scenes.some((scene) => {
                         return scene.sceneUuid === source.sceneUuid && scene.sources.some(s => s.sceneItemId === source.sceneItemId);
                     })
@@ -145,13 +144,18 @@ const model: Effects.EffectType<EffectModel> = {
                 }
             }
 
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.getSourceData();
     },
     onTriggerEvent: async (event) => {
-        await obs.batchSetSourceVisibilities(await obs.batchGetNewSourceVisibilities(event.effect.selectedSources));
+        const batchedSourceVisibilities = await obs.batchGetNewSourceVisibilities(event.effect.selectedSources);
+        if (!batchedSourceVisibilities) {
+            firebot.logger.error("batchedSourceVisibilities was null");
+            return;
+        }
+        await obs.batchSetSourceVisibilities(batchedSourceVisibilities);
     }
 };
 

@@ -1,81 +1,102 @@
-import { Firebot } from "@crowbartools/firebot-custom-scripts-types";
+import type { Plugin } from "@crowbartools/firebot-types";
+
 import effects from "./effects";
-import globals from "./globals";
 import obsRemote from "./obs-remote";
+import obsLogo from "./obs-logo-scalable.svg";
 import uiExtension from "./ui";
 
-interface Params {
+type Params = {
   obsHost: string;
   obsPort: number;
   obsPassword: string;
 }
 
-const script: Firebot.CustomScript<Params> = {
-  getScriptManifest: () => {
-    return {
-      name: "OBS Control (Canvases)",
-      description: "Firebot script to leverage OBS Websocket Canvas Support (OBS 32.1.0 or higher required)",
-      author: "DennisOnTheInternet",
-      version: "1.0.1",
-      firebotVersion: "5",
-      startupOnly: true
-    };
-  },
-  getDefaultParameters: () => {
-    return {
-      obsHost: {
-        type: "string",
-        default: "localhost",
-        description: "OBS Host",
-        secondaryDescription: "Enter the hostname or IP address of your OBS instance",
-        title: "OBS Host",
-      },
-      obsPort: {
-        type: "number",
-        default: 4455,
-        description: "OBS Port",
-        secondaryDescription: "Enter the port number for your OBS instance",
-        title: "OBS Port",
-      },
-      obsPassword: {
-        type: "string",
-        default: "",
-        description: "OBS Password",
-        secondaryDescription: "Enter the password for your OBS instance",
-        title: "OBS Password",
-      },
-    };
-  },
-  run: (runRequest) => {
-    globals.effectManager = runRequest.modules.effectManager;
-    globals.frontendCommunicator = runRequest.modules.frontendCommunicator;
-    const logger = runRequest.modules.logger;
-    globals.logger = {
-      debug: (msg, ...meta) => logger.debug(`[OBS Canvas Script] ${msg}`, ...meta),
-      info: (msg, ...meta) => logger.info(`[OBS Canvas Script] ${msg}`, ...meta),
-      warn: (msg, ...meta) => logger.warn(`[OBS Canvas Script] ${msg}`, ...meta),
-      error: (msg, ...meta) => logger.error(`[OBS Canvas Script] ${msg}`, ...meta),
-    };
-
-    runRequest.modules.uiExtensionManager.registerUIExtension(uiExtension);
-
-    for (const effect of effects) {
-      runRequest.modules.effectManager.registerEffect(effect);
+const plugin: Plugin<Params> = {
+  manifest: {
+    name: "OBS Plus",
+    version: PLUGIN_VERSION,
+    author: "DennisOnTheInternet",
+    description: "Firebot plugin which adds extra functionality for OBS like multi-canvas support (OBS 32.1.0 or higher required)",
+    tags: [
+      "obs",
+      "vertical",
+      "canvas"
+    ],
+    repo: "https://github.com/dennisrijsdijk/firebot-plugin-obs-plus",
+    minimumFirebotVersion: {
+      major: 5,
+      minor: 67,
+      patch: 0
+    },
+    icon: {
+      type: "custom",
+      url: `data:image/svg+xml;base64,${obsLogo}`
     }
-
-    obsRemote.connect(runRequest.parameters.obsHost, runRequest.parameters.obsPort, runRequest.parameters.obsPassword);
   },
-  parametersUpdated: (params) => {
-    obsRemote.connect(params.obsHost, params.obsPort, params.obsPassword, true);
+  parametersSchema: [
+    {
+      name: "obsHost",
+      type: "string",
+      title: "OBS Host",
+      description: "Enter the hostname or IP Address of your OBS Instance",
+      default: "localhost"
+    },
+    {
+      name: "obsPort",
+      type: "number",
+      title: "OBS Port",
+      description: "Enter the port for your OBS Websocket instance",
+      default: 4455
+    },
+    {
+      name: "obsPassword",
+      type: "password",
+      title: "OBS Password",
+      description: "Enter the password for your OBS Instance",
+      default: ""
+    }
+  ],
+  registers: {
+    effects,
+    frontendListeners: [
+      {
+        eventName: "dennisontheinternet:obs-plus:getCanvasedSourceData",
+        useAsync: true,
+        handler: () => obsRemote.getCanvasedSourceData()
+      },
+      {
+        eventName: "dennisontheinternet:obs-plus:getColorSources",
+        useAsync: true,
+        handler: () => obsRemote.getAllColorSources()
+      },
+      {
+        eventName: "dennisontheinternet:obs-plus:getSourcesWithFilters",
+        useAsync: true,
+        handler: () => obsRemote.getSourcesWithFilters()
+      },
+      {
+        eventName: "dennisontheinternet:obs-plus:getTextSources",
+        useAsync: true,
+        handler: () => obsRemote.getAllTextSources()
+      },
+      {
+        eventName: "dennisontheinternet:obs-plus:obsSupportsCanvases",
+        useAsync: true,
+        handler: () => obsRemote.getObsSupportsCanvases()
+      }
+    ],
+    uiExtensions: [ uiExtension ]
   },
-  stop: () => {
+  onLoad({ parameters }) {
+    obsRemote.connect(parameters.obsHost, parameters.obsPort, parameters.obsPassword);
+  },
+  onParameterUpdate({ parameters }) {
+    obsRemote.connect(parameters.obsHost, parameters.obsPort, parameters.obsPassword, true);
+  },
+  async onUnload() {
     obsRemote.abort = true;
-    obsRemote.disconnect(true);
-
-    for (const effect of effects) {
-      globals.effectManager.unregisterEffect(effect.definition.id);
-    }
+    await obsRemote.disconnect();
   }
-};
+}
 
-export default script;
+export default plugin;

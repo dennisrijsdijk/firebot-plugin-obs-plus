@@ -1,15 +1,13 @@
 import OBSWebSocket, { RequestBatchExecutionType, RequestBatchRequest } from "obs-websocket-js";
-import globals from "./globals";
-import ipcFrontend from "./ipc-frontend";
 import { OBSTransform } from "./obs-transform";
+import firebot from "@crowbartools/firebot-types";
 
 class OBSRemote {
     abort: boolean = false;
     connected: boolean = false;
     obs: OBSWebSocket = new OBSWebSocket();
     transform = new OBSTransform(this);
-    private _reconnectTimeout: NodeJS.Timeout | null = null;
-    private _frontendCommunicatorEvents: Partial<Record<keyof BackendCommunicatorCommands, string>> = {};
+    private _reconnectTimeout?: NodeJS.Timeout;
 
     async connect(host: string, port: number, password: string, forceReconnect = false): Promise<void> {
         if (forceReconnect && this.connected) {
@@ -19,15 +17,15 @@ class OBSRemote {
 
         if (this._reconnectTimeout) {
             clearTimeout(this._reconnectTimeout);
-            this._reconnectTimeout = null;
+            this._reconnectTimeout = undefined;
         }
 
         if (this.connected) {
-            globals.logger.warn("Already connected to OBS, skipping connect");
+            firebot.logger.warn("Already connected to OBS, skipping connect");
             return;
         }
 
-        globals.logger.debug(`Connecting to OBS at ${host}:${port}...`);
+        firebot.logger.debug(`Connecting to OBS at ${host}:${port}...`);
 
         this.obs.removeAllListeners();
 
@@ -36,26 +34,20 @@ class OBSRemote {
         try {
             await this.obs.connect(`ws://${host}:${port}`, password);
             this.connected = true;
-            globals.logger.info("Successfully connected to OBS");
+            firebot.logger.info("Successfully connected to OBS");
             const supportsCanvases = await this.getObsSupportsCanvases();
-            globals.logger.info(`OBS Canvas Support: ${supportsCanvases}`);
+            firebot.logger.info(`OBS Canvas Support: ${supportsCanvases}`);
         } catch (error) {
-            globals.logger.error("Failed to connect to OBS:", error);
-            globals.logger.warn("Attempting to reconnect in 10 seconds...");
+            firebot.logger.error("Failed to connect to OBS:", error);
+            firebot.logger.warn("Attempting to reconnect in 10 seconds...");
             clearTimeout(this._reconnectTimeout);
             this._reconnectTimeout = setTimeout(() => this.connect(host, port, password), 1e4);
         }
     }
 
-    async disconnect(unsubscribeIpc: boolean = false): Promise<void> {
+    async disconnect(): Promise<void> {
         this.abort = true;
         await this.obs.disconnect();
-        if (unsubscribeIpc) {
-            for (const [key, value] of Object.entries(this._frontendCommunicatorEvents)) {
-                ipcFrontend.off(key as keyof BackendCommunicatorCommands, value);
-            }
-            this._frontendCommunicatorEvents = {};
-        }
         this.connected = false;
     }
 
@@ -68,43 +60,21 @@ class OBSRemote {
             this.connected = false;
 
             if (this.abort) {
-                globals.logger.debug("OBS connection closed (abort=true), not attempting to reconnect");
+                firebot.logger.debug("OBS connection closed (abort=true), not attempting to reconnect");
                 return;
             }
 
             try {
-                globals.logger.warn("OBS connection closed, attempting to reconnect in 10 seconds...");
+                firebot.logger.warn("OBS connection closed, attempting to reconnect in 10 seconds...");
                 clearTimeout(this._reconnectTimeout);
                 this._reconnectTimeout = setTimeout(() => this.connect(host, port, password), 1e4);
             } catch { }
         });
-
-        if (Object.keys(this._frontendCommunicatorEvents).length === 0) {
-            this._frontendCommunicatorEvents["getCanvasedSourceData"] = ipcFrontend.on("getCanvasedSourceData", async () => {
-                return this.getCanvasedSourceData();
-            });
-
-            this._frontendCommunicatorEvents["getColorSources"] = ipcFrontend.on("getColorSources", async () => {
-                return this.getAllColorSources();
-            });
-
-            this._frontendCommunicatorEvents["getSourcesWithFilters"] = ipcFrontend.on("getSourcesWithFilters", async () => {
-                return this.getSourcesWithFilters();
-            });
-
-            this._frontendCommunicatorEvents["getTextSources"] = ipcFrontend.on("getTextSources", async () => {
-                return this.getAllTextSources();
-            });
-
-            this._frontendCommunicatorEvents["obsSupportsCanvases"] = ipcFrontend.on("obsSupportsCanvases", async () => {
-                return this.getObsSupportsCanvases();
-            });
-        }
     }
 
     async getObsSupportsCanvases(): Promise<boolean | null> {
         if (!this.connected) {
-            globals.logger.warn("Not connected to OBS, cannot check for canvas support");
+            firebot.logger.warn("Not connected to OBS, cannot check for canvas support");
             return null;
         }
 
@@ -112,7 +82,7 @@ class OBSRemote {
             const versionInfo = await this.obs.call("GetVersion");
             return versionInfo.availableRequests.includes("GetCanvasList");
         } catch (error) {
-            globals.logger.error("Failed to check OBS canvas support:", error);
+            firebot.logger.error("Failed to check OBS canvas support:", error);
             return null;
         }
     }
@@ -126,7 +96,7 @@ class OBSRemote {
             const response = await this.obs.call("GetCanvasList") as { canvases: Array<OBSCanvas> };
             return response.canvases;
         } catch (error) {
-            globals.logger.error("Failed to get canvases:", error);
+            firebot.logger.error("Failed to get canvases:", error);
             return null;
         }
     }
@@ -144,7 +114,7 @@ class OBSRemote {
             }
             return canvases;
         } catch (error) {
-            globals.logger.error("Failed to get canvased scene list:", error);
+            firebot.logger.error("Failed to get canvased scene list:", error);
             return null;
         }
     }
@@ -177,13 +147,13 @@ class OBSRemote {
             const groups: Array<OBSSource> = [];
             for (const res of response) {
                 if (res.requestStatus.result === false) {
-                    globals.logger.warn(`Failed to get scene items for scene ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
+                    firebot.logger.warn(`Failed to get scene items for scene ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
                     continue;
                 }
 
                 // typeguard
                 if (res.requestType !== "GetSceneItemList") {
-                    globals.logger.warn(`Unexpected response type for scene items request batch: ${res.requestType}`);
+                    firebot.logger.warn(`Unexpected response type for scene items request batch: ${res.requestType}`);
                     continue;
                 }
 
@@ -204,7 +174,7 @@ class OBSRemote {
 
             return groups;
         } catch (error) {
-            globals.logger.error("Failed to get groups:", error);
+            firebot.logger.error("Failed to get groups:", error);
             return null;
         }
     }
@@ -254,13 +224,13 @@ class OBSRemote {
 
             for (const res of response) {
                 if (res.requestStatus.result === false) {
-                    globals.logger.warn(`Failed to get filters for source ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
+                    firebot.logger.warn(`Failed to get filters for source ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
                     continue;
                 }
 
                 // typeguard
                 if (res.requestType !== "GetSourceFilterList") {
-                    globals.logger.warn(`Unexpected response type for filters request batch: ${res.requestType}`);
+                    firebot.logger.warn(`Unexpected response type for filters request batch: ${res.requestType}`);
                     continue;
                 }
 
@@ -278,7 +248,7 @@ class OBSRemote {
 
             return sources;
         } catch (error) {
-            globals.logger.error("Failed to get sources:", error);
+            firebot.logger.error("Failed to get sources:", error);
             return null;
         }
     }
@@ -303,7 +273,7 @@ class OBSRemote {
                 }
             });
         } catch (error) {
-            globals.logger.error("Failed to set FT2 text source settings:", error);
+            firebot.logger.error("Failed to set FT2 text source settings:", error);
         }
     }
 
@@ -322,7 +292,7 @@ class OBSRemote {
                 }
             });
         } catch (error) {
-            globals.logger.error("Failed to set GDI+ text source settings:", error);
+            firebot.logger.error("Failed to set GDI+ text source settings:", error);
         }
     }
 
@@ -337,7 +307,7 @@ class OBSRemote {
         } else if (sourceSettings.inputKind.startsWith("text_gdiplus")) {
             await this.setGDIPlusTextSourceSettings(inputUuid, settings);
         } else {
-            globals.logger.warn(`Attempted to set text source settings for unsupported source kind ${sourceSettings.inputKind}`);
+            firebot.logger.warn(`Attempted to set text source settings for unsupported source kind ${sourceSettings.inputKind}`);
         }
     }
 
@@ -359,7 +329,7 @@ class OBSRemote {
                 }
             });
         } catch (error) {
-            globals.logger.error("Failed to set color source settings:", error);
+            firebot.logger.error("Failed to set color source settings:", error);
         }
     }
 
@@ -385,7 +355,7 @@ class OBSRemote {
         try {
             await this.obs.callBatch(filterToggleBatch, { executionType: RequestBatchExecutionType.Parallel, haltOnFailure: false });
         } catch (error) {
-            globals.logger.error("Failed to toggle filters:", error);
+            firebot.logger.error("Failed to toggle filters:", error);
         }
     }
 
@@ -430,13 +400,13 @@ class OBSRemote {
             const response = await this.obs.callBatch(sceneItemsRequestBatch, { executionType: RequestBatchExecutionType.SerialRealtime, haltOnFailure: false });
             for (const res of response) {
                 if (res.requestStatus.result === false) {
-                    globals.logger.warn(`Failed to get scene items for scene ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
+                    firebot.logger.warn(`Failed to get scene items for scene ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
                     continue;
                 }
 
                 // typeguard
                 if (res.requestType !== "GetSceneItemList") {
-                    globals.logger.warn(`Unexpected response type for scene items request batch: ${res.requestType}`);
+                    firebot.logger.warn(`Unexpected response type for scene items request batch: ${res.requestType}`);
                     continue;
                 }
 
@@ -480,7 +450,7 @@ class OBSRemote {
 
             return canvasedSourceData;
         } catch (error) {
-            globals.logger.error("Failed to get groups:", error);
+            firebot.logger.error("Failed to get groups:", error);
             return null;
         }
     }
@@ -511,26 +481,26 @@ class OBSRemote {
             const response = await this.obs.callBatch(visibilityRequestBatch, { executionType: RequestBatchExecutionType.SerialRealtime, haltOnFailure: false });
             for (const res of response) {
                 if (res.requestStatus.result === false) {
-                    globals.logger.warn(`Failed to get visibility for scene item ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
+                    firebot.logger.warn(`Failed to get visibility for scene item ${res.requestId}:`, res.requestStatus.code, res.requestStatus.comment);
                     continue;
                 }
 
                 // typeguard
                 if (res.requestType !== "GetSceneItemEnabled") {
-                    globals.logger.warn(`Unexpected response type for visibility request batch: ${res.requestType}`);
+                    firebot.logger.warn(`Unexpected response type for visibility request batch: ${res.requestType}`);
                     continue;
                 }
 
                 const source = toggleSources[parseInt(res.requestId)];
                 if (!source) {
-                    globals.logger.warn(`Could not find source for visibility response with requestId ${res.requestId}`);
+                    firebot.logger.warn(`Could not find source for visibility response with requestId ${res.requestId}`);
                     continue;
                 }
 
                 source.visible = !res.responseData.sceneItemEnabled;
             }
         } catch (error) {
-            globals.logger.error("Failed to get source visibilities:", error);
+            firebot.logger.error("Failed to get source visibilities:", error);
             return null;
         }
 
@@ -554,7 +524,7 @@ class OBSRemote {
         try {
             await this.obs.callBatch(visibilityToggleBatch, { executionType: RequestBatchExecutionType.Parallel, haltOnFailure: false });
         } catch (error) {
-            globals.logger.error("Failed to set source visibilities:", error);
+            firebot.logger.error("Failed to set source visibilities:", error);
         }
     }
 }

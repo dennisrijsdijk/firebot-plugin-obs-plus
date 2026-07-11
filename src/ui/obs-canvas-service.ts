@@ -1,10 +1,10 @@
-import { AngularJsFactory } from "@crowbartools/firebot-custom-scripts-types/types/modules/ui-extension-manager";
+import { AngularJsFactory } from "@crowbartools/firebot-types";
 
 const factory: AngularJsFactory = {
     name: "obsCanvasService",
     function: (backendCommunicator: any): OBSCanvasService => {
         async function queryBackend<T extends keyof BackendCommunicatorCommands>(command: T, ...args: BackendCommunicatorCommands[T]["args"]): Promise<BackendCommunicatorCommands[T]["returns"]> {
-            return await backendCommunicator.fireEventAsync(`dennisontheinternet:obs-canvas:${command}`, args);
+            return await backendCommunicator.fireEventAsync(`dennisontheinternet:obs-plus:${command}`, args);
         }
 
         return {

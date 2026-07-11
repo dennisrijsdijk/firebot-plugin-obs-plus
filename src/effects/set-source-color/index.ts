@@ -1,7 +1,6 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
+import firebot, { EffectType } from "@crowbartools/firebot-types";
 import template from "./template.html";
 import obs from "../../obs-remote";
-import globals from "../../globals";
 
 type EffectModel = {
     colorSourceUuid: string;
@@ -11,10 +10,10 @@ type EffectModel = {
 }
 
 type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
-    colorSources: Array<OBSSource>;
-    selected: OBSSource;
+    colorSources: Array<OBSSource> | null;
+    selected: OBSSource | null;
 
-    supportsCanvases: boolean;
+    supportsCanvases: boolean | null;
 
     selectColorSource: (colorSource: OBSSource) => void;
     toggleCustomColor: () => void;
@@ -28,10 +27,10 @@ function rgbaToAbgr(hexColor: string) {
     return `${hexColor.substring(6, 8)}${hexColor.substring(4, 6)}${hexColor.substring(2, 4)}${hexColor.substring(0, 2)}`;
 }
 
-const model: Effects.EffectType<EffectModel> = {
+const model: EffectType<EffectModel> = {
     definition: {
         id: "dennisontheinternet:obs-canvases:set-source-color",
-        name: "[OBS Canvas] Set Source Color",
+        name: "[OBS Plus] Set Source Color",
         description: "Sets the color in an OBS color source",
         icon: "fad fa-palette",
         categories: ["common", "integrations"]
@@ -91,7 +90,7 @@ const model: Effects.EffectType<EffectModel> = {
     },
     onTriggerEvent: async (event) => {
         if (!rgbRegexp.test(event.effect.color) && !rgbaRegexp.test(event.effect.color)) {
-            globals.logger.error(`Set OBS Color Source: '${event.effect.color}' is not a valid RGB(A) color code.`);
+            firebot.logger.error(`Set OBS Color Source: '${event.effect.color}' is not a valid RGB(A) color code.`);
             return;
         }
 

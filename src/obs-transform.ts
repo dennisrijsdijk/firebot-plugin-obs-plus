@@ -1,6 +1,6 @@
 import { RequestBatchRequest } from "obs-websocket-js";
-import globals from "./globals";
 import { OBSRemote } from "./obs-remote";
+import firebot from "@crowbartools/firebot-types";
 
 export class OBSTransform {
     private obsRemote: OBSRemote;
@@ -116,7 +116,7 @@ if (!duration) {
 
             // If anchor change, update transformStart to account
             const currentAlignment = Number(currentTransform.alignment);
-            if (!isNaN(alignment) && alignment !== currentAlignment) {
+            if (alignment != null && !isNaN(alignment) && alignment !== currentAlignment) {
                 const [currentXOffset, currentYOffset] = this.getOffsetMultipliersFromAlignment(currentAlignment);
                 const [endXOffset, endYOffset] = this.getOffsetMultipliersFromAlignment(alignment);
 
@@ -151,7 +151,7 @@ if (!duration) {
             const calls = this.getLerpedCallsArray(sceneUuid, sceneItemId, transformStart, transformEnd, duration, easeIn, easeOut);
             await this.obsRemote.obs.callBatch(calls);
         } catch (error) {
-            globals.logger.error("Failed to transform scene item", error);
+            firebot.logger.error("Failed to transform scene item", error);
         }
     }
 }

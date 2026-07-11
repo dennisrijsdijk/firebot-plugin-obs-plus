@@ -1,14 +1,12 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
+import firebot, { EffectType } from "@crowbartools/firebot-types";
 import template from "./template.html";
-import obs from "../../obs-remote";
-import globals from "../../globals";
 import obsRemote from "../../obs-remote";
 
 type EffectModel = {
-    sceneUuid: string;
-    sceneName: string;
-    sceneItemId: number;
-    sourceName: string;
+    sceneUuid?: string;
+    sceneName?: string;
+    sceneItemId?: number;
+    sourceName?: string;
     groupUuid?: string;
     duration: string | number;
     easeIn: boolean;
@@ -35,10 +33,10 @@ type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
     getSourceData: () => Promise<void>;
 }>;
 
-const model: Effects.EffectType<EffectModel> = {
+const model: EffectType<EffectModel> = {
     definition: {
         id: "dennisontheinternet:obs-canvases:transform-source",
-        name: "[OBS Canvas] Transform Source",
+        name: "[OBS Plus] Transform Source",
         description: "Transforms the position, scale, or rotation of an OBS source either instantly or animated over time",
         icon: "fad fa-arrows",
         categories: ["common", "integrations"]
@@ -60,7 +58,7 @@ const model: Effects.EffectType<EffectModel> = {
         });
 
         $scope.getSceneItems = (sceneUuid: string): OBSSource[] => {
-            const scene = $scope.canvasedSourceData.find(s => s.sceneUuid === sceneUuid);
+            const scene = $scope.canvasedSourceData!.find(s => s.sceneUuid === sceneUuid);
             return scene?.sources ?? [];
         }
 
@@ -68,10 +66,10 @@ const model: Effects.EffectType<EffectModel> = {
             $scope.effect.sceneName = scene.sceneName;
             $scope.effect.sceneUuid = scene.sceneUuid;
 
-            $scope.effect.sceneItemId = null;
-            $scope.effect.sourceName = null;
-            $scope.effect.groupUuid = null;
-            $scope.selectedSource = null;
+            $scope.effect.sceneItemId = undefined;
+            $scope.effect.sourceName = undefined;
+            $scope.effect.groupUuid = undefined;
+            $scope.selectedSource = undefined;
         };
 
         $scope.selectSource = (source: OBSSource): void => {
@@ -81,26 +79,26 @@ const model: Effects.EffectType<EffectModel> = {
         };
 
         $scope.getSourceData = async (): Promise<void> => {
-            $scope.supportsCanvases = await obsCanvasService.getObsSupportsCanvases();
+            $scope.supportsCanvases = !!await obsCanvasService.getObsSupportsCanvases();
 
             if (!$scope.supportsCanvases) {
                 return;
             }
 
             const canvasedSourceData = await obsCanvasService.getCanvasedSourceData();
-            for (const canvas of canvasedSourceData) {
+            for (const canvas of canvasedSourceData!) {
                 for (const scene of canvas.scenes) {
                     scene.sources = scene.sources.filter(s => !s.inputKind.startsWith("wasapi"))
                 }
             }
 
-            $scope.canvasedSourceData = canvasedSourceData.flatMap(c => c.scenes);
+            $scope.canvasedSourceData = canvasedSourceData!.flatMap(c => c.scenes);
 
             $scope.selectedScene = $scope.canvasedSourceData.find(s => s.sceneUuid === $scope.effect.sceneUuid);
             if ($scope.selectedScene) {
                 $scope.selectedSource = $scope.selectedScene.sources.find(s => s.sceneItemId === $scope.effect.sceneItemId && s.groupUuid === $scope.effect.groupUuid);
             } else {
-                $scope.selectedSource = null;
+                $scope.selectedSource = undefined;
             }
         };
 
@@ -152,8 +150,8 @@ const model: Effects.EffectType<EffectModel> = {
         });
 
         await obsRemote.transform.transformSceneItem(
-            effect.groupUuid || effect.sceneUuid,
-            effect.sceneItemId,
+            effect.groupUuid || effect.sceneUuid!,
+            effect.sceneItemId!,
             Number(effect.duration) * 1000,
             parsedStart,
             parsedEnd,

@@ -1,7 +1,6 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
+import firebot, { EffectType } from "@crowbartools/firebot-types";
 import template from "./template.html";
 import obs from "../../obs-remote";
-import globals from "../../globals";
 
 type EffectModel = {
     selectedFilters: Array<{
@@ -33,10 +32,10 @@ type EffectScope = ng.IScope & { effect: EffectModel; } & Partial<{
     updateOnlyShowSelected: (value: boolean) => void;
 }>;
 
-const model: Effects.EffectType<EffectModel> = {
+const model: EffectType<EffectModel> = {
     definition: {
         id: "dennisontheinternet:obs-canvases:toggle-source-filter",
-        name: "[OBS Canvas] Toggle Source Filter",
+        name: "[OBS Plus] Toggle Source Filter",
         description: "Toggle filters for OBS sources, scenes and groups",
         icon: "fad fa-stars",
         categories: ["common", "integrations"]
@@ -62,12 +61,12 @@ const model: Effects.EffectType<EffectModel> = {
             if (filterIndex !== -1) {
                 $scope.effect.selectedFilters.splice(filterIndex, 1);
             } else {
-                const source = $scope.sourceList.find(s => s.inputUuid === sourceUuid);
+                const source = $scope.sourceList!.find(s => s.inputUuid === sourceUuid);
                 const sourceName = source ? source.inputName : "";
                 $scope.effect.selectedFilters.push({ sourceUuid, sourceName, filterName, action: true });
             }
 
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.setFilterAction = (sourceUuid: string, filterName: string, action: boolean | "toggle"): void => {
@@ -80,7 +79,7 @@ const model: Effects.EffectType<EffectModel> = {
         $scope.getFilterActionDisplay = (sourceUuid: string, filterName: string): string => {
             const filter = $scope.effect.selectedFilters.find(filter => filter.sourceUuid === sourceUuid && filter.filterName === filterName);
 
-            return filter ? $scope.getActionDisplay(filter.action) : "";
+            return filter ? $scope.getActionDisplay!(filter.action) : "";
         };
 
         $scope.getActionDisplay = (action: boolean | "toggle"): string => {
@@ -107,7 +106,7 @@ const model: Effects.EffectType<EffectModel> = {
 
         $scope.updateOnlyShowSelected = (value: boolean) => {
             $scope.onlyShowSelected = value;
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.filterSources = (searchText: string) => {
@@ -117,21 +116,21 @@ const model: Effects.EffectType<EffectModel> = {
 
             const normalizedSearchText = searchText.toLocaleLowerCase();
 
-            $scope.matchingSources = $scope.sourceList.filter((source) => {
+            $scope.matchingSources = $scope.sourceList!.filter((source) => {
                 return source.filters?.some((filter) => {
                     return filter.filterName.toLocaleLowerCase().includes(normalizedSearchText) &&
-                    (!$scope.onlyShowSelected || $scope.filterIsSelected(source.inputUuid, filter.filterName))
+                    (!$scope.onlyShowSelected || $scope.filterIsSelected!(source.inputUuid, filter.filterName))
                 });
             }).map(s => s.inputUuid);
         };
 
         $scope.deleteMissingFilter = (sourceUuid: string, filterName: string) => {
             $scope.effect.selectedFilters = $scope.effect.selectedFilters.filter(filter => !(filter.sourceUuid === sourceUuid && filter.filterName === filterName));
-            $scope.missingFilters = $scope.missingFilters.filter(m => !(m.sourceUuid === sourceUuid && m.filterName === filterName));
+            $scope.missingFilters = $scope.missingFilters!.filter(m => !(m.sourceUuid === sourceUuid && m.filterName === filterName));
         };
 
         $scope.getSourceList = async () => {
-            $scope.supportsCanvases = await obsCanvasService.getObsSupportsCanvases();
+            $scope.supportsCanvases = !!await obsCanvasService.getObsSupportsCanvases();
 
             if (!$scope.supportsCanvases) {
                 return;
@@ -147,7 +146,7 @@ const model: Effects.EffectType<EffectModel> = {
                 }
             }
 
-            $scope.filterSources($scope.searchText);
+            $scope.filterSources!($scope.searchText!);
         };
 
         $scope.getSourceList();
@@ -156,17 +155,22 @@ const model: Effects.EffectType<EffectModel> = {
         const allSourcesWithFilters = await obs.getSourcesWithFilters();
         const pendingActions: Array<{ sourceUuid: string; filterName: string; enabled: boolean }> = [];
 
+        if (!allSourcesWithFilters) {
+            firebot.logger.error("No sources found for toggle source filter effect");
+            return;
+        }
+
         for (const filter of event.effect.selectedFilters) {
             const source = allSourcesWithFilters.find(s => s.inputUuid === filter.sourceUuid);
             if (!source) {
-                globals.logger.warn(`Source '${filter.sourceName}' not found, skipping filter action`);
+                firebot.logger.warn(`Source '${filter.sourceName}' not found, skipping filter action`);
                 continue;
             }
 
             const filterInstance = source.filters?.find(f => f.filterName === filter.filterName);
 
             if (!filterInstance) {
-                globals.logger.warn(`Filter with name ${filter.filterName} not found on source '${filter.sourceName}', skipping filter action`);
+                firebot.logger.warn(`Filter with name ${filter.filterName} not found on source '${filter.sourceName}', skipping filter action`);
                 continue;
             }
 
