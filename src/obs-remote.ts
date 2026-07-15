@@ -38,7 +38,7 @@ class OBSRemote {
             const supportsCanvases = await this.getObsSupportsCanvases();
             firebot.logger.info(`OBS Canvas Support: ${supportsCanvases}`);
         } catch (error) {
-            firebot.logger.error("Failed to connect to OBS:", error);
+            firebot.logger.error("Failed to connect to OBS:", (error as Error).message);
             firebot.logger.warn("Attempting to reconnect in 10 seconds...");
             clearTimeout(this._reconnectTimeout);
             this._reconnectTimeout = setTimeout(() => this.connect(host, port, password), 1e4);
